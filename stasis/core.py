@@ -38,24 +38,6 @@ class DefaultConfigFactory(dict):
 
 class Configurator(BaseConfigurator):
     @action_method
-    def add_node_factory(self, name, factory):
-        factory = self.maybe_dotted(factory)
-        if not name:
-            name = ''
-
-        def register():
-            self.registry.registerUtility(factory, INodeFactory, name=name)
-
-        intr = self.introspectable('node factories',
-                                   name,
-                                   self.object_description(factory),
-                                   'node factory')
-        intr['factory'] = factory
-        intr['name'] = name
-        self.action((INodeFactory, name), register,
-                    introspectables=(intr,))
-
-    @action_method
     def set_config_factory(self, factory):
         factory = self.maybe_dotted(factory)
 
