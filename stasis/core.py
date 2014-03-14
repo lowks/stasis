@@ -52,6 +52,11 @@ class Configurator(BaseConfigurator):
         self.action(IConfigFactory, register, introspectables=(intr,))
 
 
+def relroute_path(request, *args, **kw):
+    path = request.route_path(*args, **kw)
+    return os.path.relpath(path, os.path.dirname(request.path))
+
+
 def static_path(request, path, **kw):
     if not os.path.isabs(path):
         if not ':' in path:
@@ -84,6 +89,7 @@ class Site(object):
             config = self.site.config.config
             self.registry = config.registry
             config.add_request_method(static_path)
+            config.add_request_method(relroute_path)
             config.commit()
             self.registry['path'] = path
             self.siteconfig = config.registry.queryUtility(
