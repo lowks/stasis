@@ -13,6 +13,7 @@ from pyramid.util import action_method
 from stasis.events import PreBuild
 from stasis.interfaces import IConfigFactory
 import dirtools
+import errno
 import logging
 import os
 import sys
@@ -140,7 +141,7 @@ class Site(object):
         return list(sorted(paths))
 
     def write(self, relpath, response):
-        fn = os.path.join(self.siteconfig['site']['outpath'], relpath[1:])
+        fn = os.path.join(self.siteconfig['site']['outpath'], relpath)
         dirname = os.path.dirname(fn)
         if not os.path.lexists(dirname):
             os.makedirs(dirname)
@@ -148,13 +149,15 @@ class Site(object):
             with open(fn, 'rb') as f:
                 if f.read() == response.body:
                     log.info("Skipping up to date '%s'." % relpath)
-                    return
+                    return relpath
         log.info("Writing '%s'." % relpath)
         with open(fn, 'wb') as f:
             f.write(response.body)
+        return relpath
 
     def build(self):
         with main_module(self.site):
+            written_paths = set()
             self.registry.notify(PreBuild(self))
             paths = self.get_paths()
             router = Router(self.registry)
@@ -164,4 +167,17 @@ class Site(object):
                 if extensions is not None:
                     request._set_extensions(extensions)
                 response = router.handle_request(request)
-                self.write(path, response)
+                written_paths.add(self.write(path[1:], response))
+            all_paths = dirtools.Dir(self.siteconfig['site']['outpath'])
+            for path in set(all_paths.files()).difference(written_paths):
+                fn = os.path.join(self.siteconfig['site']['outpath'], path)
+                log.info("Deleting '%s'." % path)
+                os.unlink(fn)
+            for path in all_paths.subdirs(sort_reverse=True):
+                fn = os.path.join(self.siteconfig['site']['outpath'], path)
+                try:
+                    os.rmdir(fn)
+                    log.info("Removed '%s'." % path)
+                except OSError as ex:
+                    if ex.errno != errno.ENOTEMPTY:
+                        raise
