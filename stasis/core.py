@@ -11,7 +11,7 @@ from pyramid.scripting import _make_request
 from pyramid.traversal import traverse
 from pyramid.util import action_method
 from stasis.events import PreBuild
-from stasis.interfaces import IConfigFactory, INodeFactory
+from stasis.interfaces import IConfigFactory
 import dirtools
 import logging
 import os
