@@ -8,6 +8,7 @@ from pyramid.path import caller_package
 from pyramid.resource import abspath_from_resource_spec
 from pyramid.router import Router
 from pyramid.scripting import _make_request
+from pyramid.threadlocal import manager
 from pyramid.traversal import traverse
 from pyramid.util import action_method
 from stasis.events import PreBuild
@@ -78,29 +79,16 @@ def main_module(module):
 
 
 class Site(object):
+    threadlocal_manager = manager
+
     def __init__(self, path):
         config_py = os.path.join(path, 'config.py')
         if not os.path.lexists(config_py):
             raise ValueError("No config.py found at '%s'." % path)
+        self.path = path
         self.site = new_module('__main__')
         self.site.__file__ = os.path.join(path, '__init__.py')
         self.site.__path__ = [path]
-        with main_module(self.site):
-            __import__("__main__.config")
-            config = self.site.config.config
-            self.registry = config.registry
-            config.add_request_method(static_path)
-            config.add_request_method(relroute_path)
-            config.commit()
-            self.registry['path'] = path
-            self.siteconfig = config.registry.queryUtility(
-                IConfigFactory,
-                default=DefaultConfigFactory)(self.registry)
-            self.siteconfig.setdefault('site', {})
-            self.siteconfig['site'].setdefault('outpath', 'output')
-            self.registry['root'] = config.registry.queryUtility(IRootFactory)
-            self.registry['siteconfig'] = self.siteconfig
-            self.registry.registerUtility(lambda h, r: h, ITweens)
 
     def get_paths(self):
         paths = set()
@@ -157,6 +145,21 @@ class Site(object):
 
     def build(self):
         with main_module(self.site):
+            __import__("__main__.config")
+            config = self.site.config.config
+            self.registry = config.registry
+            config.add_request_method(static_path)
+            config.add_request_method(relroute_path)
+            config.commit()
+            self.registry['path'] = self.path
+            self.siteconfig = config.registry.queryUtility(
+                IConfigFactory,
+                default=DefaultConfigFactory)(self.registry)
+            self.siteconfig.setdefault('site', {})
+            self.siteconfig['site'].setdefault('outpath', 'output')
+            self.registry['root'] = config.registry.queryUtility(IRootFactory)
+            self.registry['siteconfig'] = self.siteconfig
+            self.registry.registerUtility(lambda h, r: h, ITweens)
             written_paths = set()
             self.registry.notify(PreBuild(self))
             paths = self.get_paths()
@@ -164,9 +167,14 @@ class Site(object):
             extensions = self.registry.queryUtility(IRequestExtensions)
             for path in paths:
                 request = _make_request(path, registry=self.registry)
-                if extensions is not None:
-                    request._set_extensions(extensions)
-                response = router.handle_request(request)
+                self.threadlocal_manager.push(dict(
+                    registry=self.registry, request=request))
+                try:
+                    if extensions is not None:
+                        request._set_extensions(extensions)
+                    response = router.handle_request(request)
+                finally:
+                    self.threadlocal_manager.pop()
                 written_paths.add(self.write(path[1:], response))
             all_paths = dirtools.Dir(self.siteconfig['site']['outpath'])
             for path in set(all_paths.files()).difference(written_paths):
