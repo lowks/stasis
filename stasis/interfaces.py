@@ -5,7 +5,7 @@ class IConfigFactory(Interface):
     pass
 
 
-class INodeFactory(Interface):
+class IViewletMapper(Interface):
     pass
 
 
