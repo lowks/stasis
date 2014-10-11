@@ -5,6 +5,7 @@ setup(
     version='0.3',
     name='stasis',
     packages=['stasis'],
+    description='statis',
     install_requires=[
         'dirtools',
         'pyramid'],
